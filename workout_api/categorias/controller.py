@@ -2,6 +2,7 @@ from fastapi import APIRouter, status, Body, HTTPException
 from pydantic import UUID4
 from uuid import uuid4
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 
 from workout_api.contrib.dependencies import DatabaseDependency
 from workout_api.categorias.schemas import CategoriaIn, CategoriaOut
@@ -18,10 +19,13 @@ async def post(
 ) -> CategoriaOut:
     categoria_out = CategoriaOut(id=uuid4(), **categoria_in.model_dump())
     categoria_model = CategoriaModel(**categoria_out.model_dump())
-
-    db_session.add(categoria_model)
-    await db_session.commit()
-
+    try:
+        db_session.add(categoria_model)
+        await db_session.commit()
+    except IntegrityError:
+        raise HTTPException(
+            status_code=status.HTTP_303_SEE_OTHER,
+            detail=f"Já existe um categoria com o nome: {categoria_model.nome}")
     return categoria_out
 
 @router.get(path='/', 

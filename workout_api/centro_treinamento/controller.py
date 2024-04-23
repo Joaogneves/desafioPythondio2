@@ -2,6 +2,7 @@ from fastapi import APIRouter, status, Body, HTTPException
 from pydantic import UUID4
 from uuid import uuid4
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 
 from workout_api.contrib.dependencies import DatabaseDependency
 from workout_api.centro_treinamento.schemas import CentroTreinamentoOut, CentroTreinamentoIn
@@ -19,10 +20,13 @@ async def post(
 ) -> CentroTreinamentoOut:
     centro_out = CentroTreinamentoOut(id=uuid4(), **centro_in.model_dump())
     centro_model = CentroTreinamentoModel(**centro_out.model_dump())
-
-    db_session.add(centro_model)
-    await db_session.commit()
-
+    try:
+        db_session.add(centro_model)
+        await db_session.commit()
+    except IntegrityError:
+        raise HTTPException(
+            status_code=status.HTTP_303_SEE_OTHER,
+            detail=f"Já existe um CT com o nome: {centro_model.nome}")
     return centro_out
 
 @router.get(path='/',

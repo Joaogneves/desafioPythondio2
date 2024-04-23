@@ -4,11 +4,12 @@ from uuid import uuid4
 from fastapi_pagination import paginate, LimitOffsetPage
 from pydantic import UUID4
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 
 from workout_api.centro_treinamento.models import CentroTreinamentoModel
 from workout_api.centro_treinamento.schemas import CentroTreinamentoOut
 from workout_api.contrib.dependencies import DatabaseDependency
-from workout_api.atleta.schemas import AtletaIn, AtletaOut, AtletaUpdate
+from workout_api.atleta.schemas import AtletaIn, AtletaOut, AtletaUpdate, AtletaOutDes
 from workout_api.atleta.models import AtletaModel
 from workout_api.categorias.models import CategoriaModel
 from workout_api.categorias.schemas import CategoriaOut
@@ -50,10 +51,10 @@ async def post(
 
         db_session.add(atleta_model)
         await db_session.commit()
-    except Exception:
+    except IntegrityError:
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Ocorreu um erro ao inserir o atleta no banco de dados.")
+            status_code=status.HTTP_303_SEE_OTHER,
+            detail=f"Já existe um atleta cadastrado com o cpf: {atleta_model.cpf}")
 
     return atleta_model
 
@@ -61,14 +62,24 @@ async def post(
 @router.get(path='/', 
             summary='Consultar todos os atletas', 
             status_code=status.HTTP_200_OK, 
-            response_model=LimitOffsetPage[AtletaOut])
-async def query(db_session: DatabaseDependency) -> LimitOffsetPage[AtletaOut]:
-    atletas: LimitOffsetPage[AtletaOut] = (
-        await db_session.execute(select(AtletaModel))
-    ).scalars().all()
-    
+            response_model=LimitOffsetPage[AtletaOutDes])
+async def query(db_session: DatabaseDependency, nome:str = '', cpf:str = '') -> LimitOffsetPage[AtletaOutDes]:
+    atletas_res = []
+    if nome:
+        atletas: LimitOffsetPage[AtletaOutDes] = (
+            await db_session.execute(select(AtletaModel).filter_by(nome=nome))
+        ).scalars().all()
+    elif cpf:
+        atletas: LimitOffsetPage[AtletaOutDes] = (
+            await db_session.execute(select(AtletaModel).filter_by(cpf=cpf))
+        ).scalars().all()
+    else:
+        atletas: LimitOffsetPage[AtletaOutDes] = (
+            await db_session.execute(select(AtletaModel))
+        ).scalars().all()
+
     atletas_res = [
-        AtletaOut.model_validate(atleta) 
+        AtletaOutDes.model_validate(atleta) 
         for atleta in atletas
         ]
     
